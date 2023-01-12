@@ -20,7 +20,7 @@ mongoose
     console.log('DB connections successful!');
   });
 // .catch((err) => {
-//   // use this code to catch database error
+// use this code to catch database error
 //   console.log(err);
 // });
 
