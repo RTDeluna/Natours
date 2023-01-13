@@ -1,29 +1,62 @@
 const Tour = require('./../Models/tourModel');
-
-// exports.checkID = (req, res, next, val) => {
-//   console.log(`Tour id is: ${val}`);
-//   if (req.params.id * 1 >= tours.length) {
-//     return res.status(404).json({
-//       status: 'fail',
-//       message: 'Invalid ID',
-//     });
-//   }
-//   next();
-// };
-
-// exports.checkBody = (req, res, next) => {
-//   if (!req.body.name || !req.body.price) {
-//     return res.status(400).json({
-//       status: 'failed',
-//       message: 'Missing name or price',
-//     });
-//   }
-//   next();
-// };
+//Alias
+exports.aliasTopTours = (req, res, next) => {
+  req.query.limit = '5';
+  req.query.sort = '-ratingsAverage,price';
+  req.query.fields = 'name, price, ratinsAverage, summary, difficulty';
+  next();
+};
 
 exports.getAllTours = async (req, res) => {
   try {
-    const tours = await Tour.find();
+    //build a query
+    console.log(req.query);
+    //Filtering
+    const queryObj = { ...req.query };
+    const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    excludedFields.forEach((el) => delete queryObj[el]);
+
+    //Advance Filtering
+    let queryStr = JSON.stringify(queryObj);
+    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, (match) => `$${match}`);
+    console.log(JSON.parse(queryStr));
+
+    let query = Tour.find(JSON.parse(queryStr));
+
+    //Sorting
+    if (req.query.sort) {
+      const sortBy = req.query.sort.split(',').join('');
+      // console.log(sortBy);
+      query = query.sort(sortBy);
+      //sort ('price ratingsAverage')
+    } else {
+      query - query.sort('createdAt');
+    }
+
+    //Field Limiting
+    if (req.query.fields) {
+      const fields = req.query.fields.split(',').join('');
+      query = query.select(fields);
+    } else {
+      query = query.select('__v');
+    }
+
+    //Pagination
+    const page = req.query.page * 1 || 1;
+    const limit = req.query.limit * 1 || 100;
+    const skip = (page - 1) * limit;
+
+    query = query.skip(skip).limit(limit);
+
+    if (req.query.page) {
+      const numTours = await Tour.countDocuments();
+      if (skip >= numTours) throw new Error('This page does not exist');
+    }
+
+    //Execute Query
+    const tours = await query;
+
+    //send response
     res.status(200).json({
       status: 'success',
       requestedAt: req.requestTime,
@@ -95,9 +128,17 @@ exports.updateTour = async (req, res) => {
   }
 };
 
-exports.deleteTour = (req, res) => {
-  res.status(204).json({
-    status: 'delete',
-    data: null, //null to remove content
-  });
+exports.deleteTour = async (req, res) => {
+  try {
+    await Tour.findByIdAndDelete(req.params.id);
+    res.status(204).json({
+      status: 'delete',
+      data: null, //null to remove content
+    });
+  } catch (err) {
+    return res.status(404).json({
+      status: 'fail',
+      message: err,
+    });
+  }
 };
